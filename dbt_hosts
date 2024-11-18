@@ -1,1 +1,68 @@
-xdgxdgvxbgxbgxbxbx
+USE [master]
+GO
+
+/****** Object:  StoredProcedure [dbo].[BackupAndDetach_DMI_SAAudit_VB]    Script Date: 11/18/2024 11:15:58 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[BackupAndDetach_DMI_SAAudit_VB] 
+    @SAAuditDBName NVARCHAR(128),
+    @bakFolder NVARCHAR(255) = 'D:\DO-NOT-DELETE\DMI_SAAudits',
+	@WarnMe NVARCHAR(5) = 'YES'
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @bakFilename NVARCHAR(255);
+    DECLARE @DetachSQL NVARCHAR(MAX);
+
+--1. Check if the DB start with "DMI_SAAudit_", if not throw an error
+	/****** Work In Progress ******/
+IF NOT @SAAuditDBName LIKE'DMI_SAAudit_%'BEGIN
+        PRINT 'Error: The database name must start with "DMI_SAAudit_".';
+RETURN;
+END
+--2. Check if Database Exists 
+    -- Check if the database exists
+    IF NOT EXISTS (SELECT 1 FROM sys.databases WHERE name = @SAAuditDBName)
+    BEGIN
+        PRINT 'Database not found';
+        RETURN;
+    END
+
+---3. Evauluate the size so we can warn on the time it takes
+
+	--4. Build the .bak file path
+	If @WarnMe = 'NO'
+	  BEGIN
+		SET @bakFilename = @bakFolder + '\BakFiles' + @SAAuditDBName + '.bak';
+
+		BEGIN TRY
+			-- Perform the backup
+			PRINT 'created bak the database...';
+			BACKUP DATABASE @SAAuditDBName
+			TO DISK = @bakFilename
+			WITH INIT, COMPRESSION;
+
+			PRINT 'Database backup completed successfully.';
+
+			-- Detach the database
+			PRINT 'Detaching the database...';
+
+			SET @DetachSQL = 'EXEC sp_detach_db @dbname = ''' + @SAAuditDBName + ''';';
+			EXEC sp_executesql @DetachSQL;
+
+			PRINT 'Database detached successfully.';
+
+		END TRY
+		BEGIN CATCH
+			-- Error handling
+			PRINT 'Error: ' + ERROR_MESSAGE();
+			ROLLBACK TRANSACTION;
+		END CATCH
+	  END -- End of If @RealRun = 1 
+END;
+GO
